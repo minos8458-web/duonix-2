@@ -3170,7 +3170,7 @@ function quitToTitle(){
   if(typeof stopSwapFx!=='undefined'){stopSwapFx(true);stopSwapFx(false);}
   gameActive=false;clearInterval(timerIv);if(cpuTimer)clearTimeout(cpuTimer);stopTick();stopBGM();stopFireEffect();document.getElementById('final-count').style.display='none';
   document.getElementById('opt-ov').classList.remove('show');document.getElementById('quit-confirm').classList.remove('show');
-  slide('scr-game','scr-title','R');forcePlayTitle();
+  slide('scr-game','scr-title','R');stopTitleAudio();
 }
 function endGame(){
   if(typeof stopSwapFx!=='undefined'){stopSwapFx(true);stopSwapFx(false);}
@@ -3256,9 +3256,9 @@ document.getElementById('confirm-yes').addEventListener('click',function(){press
 document.getElementById('confirm-no').addEventListener('click',function(){pressBtn(this,()=>{SFX.btnCancel();document.getElementById('confirm-ov').classList.remove('show');showOv('diff-ov');});});
 
 // back buttons
-setupCardTouch(document.getElementById('shop-back'),()=>{SFX.btnMenu();slide('scr-shop','scr-title','R');forcePlayTitle();});
-setupCardTouch(document.getElementById('stats-back'),()=>{SFX.btnMenu();slide('scr-stats','scr-title','R');forcePlayTitle();});
-setupCardTouch(document.getElementById('opt-back'),()=>{SFX.btnMenu();slide('scr-opt','scr-title','R');forcePlayTitle();});
+setupCardTouch(document.getElementById('shop-back'),()=>{SFX.btnMenu();slide('scr-shop','scr-title','R');stopTitleAudio();});
+setupCardTouch(document.getElementById('stats-back'),()=>{SFX.btnMenu();slide('scr-stats','scr-title','R');stopTitleAudio();});
+setupCardTouch(document.getElementById('opt-back'),()=>{SFX.btnMenu();slide('scr-opt','scr-title','R');stopTitleAudio();});
 
 // in-game
 document.getElementById('hud-opt-btn').addEventListener('click',function(){pressBtn(this,()=>{SFX.btnOpt();pauseStartTime=Date.now();pauseGame();document.getElementById('opt-ov').classList.add('show');});});
@@ -3267,7 +3267,7 @@ document.getElementById('ov-quit').addEventListener('click',function(){pressBtn(
 document.getElementById('quit-yes').addEventListener('click',function(){pressBtn(this,quitToTitle);});
 document.getElementById('quit-no').addEventListener('click',function(){pressBtn(this,()=>{SFX.btnCancel();document.getElementById('quit-confirm').classList.remove('show');resumeGame();});});
 document.getElementById('retry-btn').addEventListener('click',function(){pressBtn(this,()=>{SFX.btnAction();document.getElementById('scr-result').className='screen offD';startGame();});});
-document.getElementById('menu-btn').addEventListener('click',function(){pressBtn(this,()=>{SFX.btnMenu();slide('scr-result','scr-title','D');forcePlayTitle();});});
+document.getElementById('menu-btn').addEventListener('click',function(){pressBtn(this,()=>{SFX.btnMenu();slide('scr-result','scr-title','D');stopTitleAudio();});});
 
 // ctrl buttons
 document.getElementById('btn-r').onclick=()=>triggerRemove('R');
@@ -3313,9 +3313,6 @@ sizeC();
 function _unlockAudio(){
   if(!bgmCtx)bgmCtx=new(window.AudioContext||window.webkitAudioContext)();
   if(bgmCtx.state==='suspended')bgmCtx.resume();
-  // 타이틀 화면에서만 음악 시작
-  const onTitle=document.getElementById('scr-title')?.classList.contains('active');
-  if(onTitle&&(!window._titleBufSrc||bgmType!=='title'))forcePlayTitle();
 }
 function forcePlayTitle(){
   stopBGM();
@@ -3327,11 +3324,12 @@ function forcePlayTitle(){
 // 첫 터치/클릭에서 오디오 잠금 해제 + 음악 시작
 document.addEventListener('touchstart',_unlockAudio,{once:true});
 document.addEventListener('click',_unlockAudio,{once:true});
-// 타이틀 화면의 모든 터치에서도 음악 재시작 보장
-document.getElementById('scr-title').addEventListener('touchstart',()=>{
-  if(!window._titleBufSrc||bgmType!=='title')forcePlayTitle();
-},{passive:true});
-document.getElementById('scr-title').addEventListener('click',()=>{
-  if(!window._titleBufSrc||bgmType!=='title')forcePlayTitle();
-},{passive:true});
+// 타이틀 화면 터치 → 음악 시작
+function tryStartTitleMusic(){
+  if(!bgmCtx)bgmCtx=new(window.AudioContext||window.webkitAudioContext)();
+  if(bgmCtx.state==='suspended')bgmCtx.resume().then(()=>forcePlayTitle());
+  else forcePlayTitle();
+}
+document.getElementById('scr-title').addEventListener('touchstart',tryStartTitleMusic,{passive:true});
+document.getElementById('scr-title').addEventListener('click',tryStartTitleMusic,{passive:true});
 </script></body></html>
