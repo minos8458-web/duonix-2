@@ -1412,7 +1412,7 @@ function prefetchShopBuf(){
   // ArrayBuffer만 미리 받아둠 — 디코딩은 AudioContext 활성화 후에
   if(window._shopAB||window._shopFetching)return;
   window._shopFetching=true;
-  fetch('https://raw.githubusercontent.com/minos8458-web/duonix-2/main/in_shop.mp3')
+  fetch('https://raw.githubusercontent.com/minos8458-web/duonix-2/main/in%20shop.mp3')
     .then(r=>r.arrayBuffer())
     .then(ab=>{window._shopAB=ab;window._shopFetching=false;})
     .catch(()=>{window._shopFetching=false;});
@@ -1435,7 +1435,7 @@ function playShopBGM(){
   const go=()=>{
     if(_shopBuf){_playShopBuf(_shopBuf);return;}
     const src=window._shopAB||null;
-    const doFetch=()=>fetch('https://raw.githubusercontent.com/minos8458-web/duonix-2/main/in_shop.mp3')
+    const doFetch=()=>fetch('https://raw.githubusercontent.com/minos8458-web/duonix-2/main/in%20shop.mp3')
       .then(r=>r.arrayBuffer()).then(ab=>bgmCtx.decodeAudioData(ab,buf=>{_shopBuf=buf;_playShopBuf(buf);})).catch(()=>{});
     if(src){bgmCtx.decodeAudioData(src.slice(0),buf=>{_shopBuf=buf;_playShopBuf(buf);},doFetch);}
     else doFetch();
@@ -3488,8 +3488,9 @@ document.addEventListener('touchstart',_unlockAudio,{once:true});
 document.addEventListener('click',_unlockAudio,{once:true});
 // 타이틀 화면 터치 → 음악 시작
 function tryStartTitleMusic(){
-  // 상점 BGM 재생 중이면 무시
+  // 상점/게임 BGM 재생 중이면 무시
   if(_shopBufSrc)return;
+  if(bgmType==='game')return;
   // 이미 타이틀 BGM 재생 중이면 무시
   if(bgmType==='title'&&window._titleBufSrc)return;
   if(!bgmCtx)bgmCtx=new(window.AudioContext||window.webkitAudioContext)();
