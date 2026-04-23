@@ -905,20 +905,20 @@ canvas.sc{display:block;width:100%;height:100%;border-radius:6px;border:2px soli
   <div id="ctrl-area">
     <div id="ctrl-two">
       <button class="act-btn red" id="btn-r" data-col="R">
-        <span class="btn-body" style="width:130px;height:52px;" id="btn-r-label">왼쪽</span>
+        <canvas id="btn-r-cv" style="display:none;border-radius:8px;"></canvas><span class="btn-body" style="width:130px;height:52px;" id="btn-r-label">왼쪽</span>
       </button>
       <div class="key-hint-mid"><span>Z / X</span><span>↑ 스와이프</span></div>
       <button class="act-btn blue" id="btn-b" data-col="B">
-        <span class="btn-body" style="width:130px;height:52px;" id="btn-b-label">오른쪽</span>
+        <canvas id="btn-b-cv" style="display:none;border-radius:8px;"></canvas><span class="btn-body" style="width:130px;height:52px;" id="btn-b-label">오른쪽</span>
       </button>
     </div>
     <div id="ctrl-one">
       <div style="display:flex;gap:10px">
         <button class="act-btn red-s" id="btn-rs" data-col="R">
-          <span class="btn-body" style="width:108px;height:48px;">왼쪽↑</span>
+          <canvas id="btn-rs-cv" style="display:none;border-radius:8px;"></canvas><span class="btn-body" style="width:108px;height:48px;">왼쪽↑</span>
         </button>
         <button class="act-btn blue-s" id="btn-bs" data-col="B">
-          <span class="btn-body" style="width:108px;height:48px;">오른쪽↑</span>
+          <canvas id="btn-bs-cv" style="display:none;border-radius:8px;"></canvas><span class="btn-body" style="width:108px;height:48px;">오른쪽↑</span>
         </button>
       </div>
     </div>
@@ -1296,6 +1296,37 @@ function stopTick(){tickActive=false;tickNodes.forEach(n=>{try{n.stop();}catch(e
 
 const SFX={
   crack(col){const c=BLOCK_COLORS[col===blockColors.red?redColorIdx:blueColorIdx];nb(.07,col===blockColors.red?1100:1800,.25);o(col===blockColors.red?600:900,'triangle',.08,.1);},
+  woodCrack(){
+    // 목재 파열음 10종 랜덤 재생
+    const v=sv();
+    function ns(dur,bp,vol,t0=0,q=1,dec=1.8){
+      try{const a=AC(),now=a.currentTime+t0,len=Math.floor(a.sampleRate*dur);
+      const buf=a.createBuffer(1,len,a.sampleRate),d=buf.getChannelData(0);
+      for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/len,dec);
+      const src=a.createBufferSource();src.buffer=buf;
+      const f=a.createBiquadFilter();f.type='bandpass';f.frequency.value=bp;f.Q.value=q;
+      const g=a.createGain();g.gain.setValueAtTime(vol*v,now);g.gain.exponentialRampToValueAtTime(.001,now+dur);
+      src.connect(f);f.connect(g);g.connect(a.destination);src.start(now);}catch(e){}
+    }
+    function tn(f1,f2,tp,dur,vol,t0=0){
+      try{const a=AC(),t=a.currentTime+t0,os=a.createOscillator(),g=a.createGain();
+      os.type=tp;os.frequency.setValueAtTime(f1,t);
+      if(f2!==f1)os.frequency.exponentialRampToValueAtTime(f2,t+dur);
+      g.gain.setValueAtTime(vol*v,t);g.gain.exponentialRampToValueAtTime(.001,t+dur);
+      os.connect(g);g.connect(a.destination);os.start(t);os.stop(t+dur+.01);}catch(e){}
+    }
+    const r=Math.floor(Math.random()*10);
+    if(r===0){ns(.08,400,.5);ns(.06,200,.4,.01);ns(.05,800,.3,.02);tn(300,50,'sawtooth',.1,.2);}
+    else if(r===1){ns(.12,150,.6,0,.5,2.2);ns(.09,300,.45,.01);ns(.06,600,.25,.03);tn(180,45,'sine',.14,.35);}
+    else if(r===2){ns(.05,1200,.45,0,2);ns(.04,600,.35,.01,1.5);ns(.04,300,.25,.02);tn(600,150,'triangle',.08,.18);}
+    else if(r===3){[0,.015,.03,.05,.07].forEach((t,i)=>{ns(.05,300+i*120,.35+i*.03,t,1.5);});}
+    else if(r===4){ns(.1,300,.65);ns(.08,150,.5,.01);ns(.06,600,.4,.02);ns(.05,1000,.25,.03);tn(250,40,'sawtooth',.12,.3);tn(500,100,'square',.08,.15,.02);}
+    else if(r===5){ns(.05,500,.48,0,3,2.5);ns(.04,900,.3,.01,2);ns(.04,200,.35,.01,.8);tn(400,180,'triangle',.07,.2);}
+    else if(r===6){ns(.08,350,.5);ns(.06,200,.38,.02);tn(300,80,'sine',.25,.2);tn(220,100,'triangle',.2,.15,.05);ns(.12,500,.15,.06,.5,2.5);}
+    else if(r===7){for(let i=0;i<6;i++){const t=i*.012;ns(.04+Math.random()*.03,200+Math.random()*800,.3+Math.random()*.25,t,1+Math.random());}tn(200,50,'sawtooth',.08,.22,.01);}
+    else if(r===8){ns(.15,100,.62,0,.4,2.8);ns(.08,400,.42,.02);ns(.06,700,.28,.04);tn(150,40,'sine',.18,.4);tn(350,100,'triangle',.1,.2,.03);}
+    else{ns(.04,700,.42,0,2.5,2);ns(.03,1100,.28,.01,2);ns(.06,300,.35,.01,.8);tn(500,200,'triangle',.07,.18);tn(350,150,'triangle',.06,.14,.02);}
+  },
   wrong(){oR(230,70,'sawtooth',.28,.2);},
   combo(n){
     const t=Math.min(n,99)/99;
@@ -1496,6 +1527,63 @@ function updateBlockColors(){
   const rs=document.getElementById('btn-rs'),bs=document.getElementById('btn-bs');
   if(rs){const b=rs.querySelector('.btn-body');if(b)b.textContent=rc.name+'↑';}
   if(bs){const b=bs.querySelector('.btn-body');if(b)b.textContent=bc.name+'↑';}
+  // 우드블럭 버튼 텍스처 적용
+  applyWoodBtnTexture();
+}
+
+function applyWoodBtnTexture(){
+  const woodOn=shopItems.woodBlock&&shopItems.woodBlock.equipped;
+  // 버튼 ID 목록: [btnId, cvId, labelId, isBlue, width, height]
+  const btns=[
+    ['btn-r','btn-r-cv','btn-r-label',false,130,52],
+    ['btn-b','btn-b-cv','btn-b-label',true,130,52],
+    ['btn-rs','btn-rs-cv',null,false,108,48],
+    ['btn-bs','btn-bs-cv',null,true,108,48],
+  ];
+  btns.forEach(([btnId,cvId,lblId,isBlue,w,h])=>{
+    const btn=document.getElementById(btnId);
+    const cv=document.getElementById(cvId);
+    const lbl=lblId?document.getElementById(lblId):btn?.querySelector('.btn-body');
+    if(!btn||!cv)return;
+    if(woodOn){
+      // 캔버스 표시, 텍스트 숨김
+      cv.width=w;cv.height=h;
+      cv.style.cssText=`display:block;border-radius:8px;width:${w}px;height:${h}px;position:absolute;top:0;left:0;`;
+      const imgIdx=isBlue?_btnWoodIdx.b:_btnWoodIdx.r;
+      const img=_woodImgs[imgIdx%10];
+      const ctx=cv.getContext('2d');
+      ctx.clearRect(0,0,w,h);
+      const col=isBlue?blockColors.blue:blockColors.red;
+      const R=8;
+      // 그리기
+      ctx.save();ctx.beginPath();ctx.roundRect(0,0,w,h,R);ctx.clip();
+      if(img&&img.complete&&img.naturalWidth>0){
+        ctx.drawImage(img,0,0,w,h);
+        ctx.globalAlpha=0.18;ctx.fillStyle=col;ctx.fillRect(0,0,w,h);ctx.globalAlpha=1;
+      } else {
+        const wb=ctx.createLinearGradient(0,0,0,h);
+        wb.addColorStop(0,'#d4904a');wb.addColorStop(.3,'#c07838');wb.addColorStop(.6,'#d4904a');wb.addColorStop(1,'#b86830');
+        ctx.fillStyle=wb;ctx.fillRect(0,0,w,h);
+        ctx.globalAlpha=0.18;ctx.fillStyle=col;ctx.fillRect(0,0,w,h);ctx.globalAlpha=1;
+        WOOD_GRAINS[imgIdx%WOOD_GRAINS.length](ctx,0,0,w,h);
+      }
+      ctx.restore();
+      ctx.strokeStyle='#5a3010';ctx.lineWidth=2;ctx.beginPath();ctx.roundRect(1,1,w-2,h-2,R);ctx.stroke();
+      // 색이름 텍스트 (우드 위에 표시)
+      const nm=isBlue?BLOCK_COLORS[blueColorIdx].name:BLOCK_COLORS[redColorIdx].name;
+      const txtCol=btnTextColor(col);
+      ctx.font=`900 ${h*.28}px sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillStyle='rgba(0,0,0,.35)';ctx.fillText(nm+(lblId?'':'↑'),w/2+1,h/2+1);
+      ctx.fillStyle=txtCol;ctx.fillText(nm+(lblId?'':'↑'),w/2,h/2);
+      if(lbl)lbl.style.opacity='0';
+    } else {
+      // 기본 버튼 복원
+      cv.style.display='none';
+      if(lbl)lbl.style.opacity='';
+    }
+  });
+  // btn-body position relative 보장
+  document.querySelectorAll('.act-btn .btn-body').forEach(b=>b.style.position='relative');
 }
 const WOOD_OK_COLORS=[2,4,8,9]; // 화이트오크(2),금색(4),주황(8),갈색(9) — 우드블럭 전용 색상
 const WOOD_ONLY_COLORS=[2]; // 일반 블럭에서 숨길 색상 (화이트오크)
@@ -1527,6 +1615,8 @@ let optPreviewGrain={r:0,b:0};
 
 function drawOptBlockPreview(cvId, colorIdx, isBlue){
   const cv=document.getElementById(cvId);if(!cv)return;
+  // 실제 인게임 블럭 사이즈에 맞춤
+  if(BW>0&&BH>0){cv.width=BW;cv.height=BH;cv.style.width=BW+'px';cv.style.height=BH+'px';}
   const ctx=cv.getContext('2d');
   const W=cv.width,H=cv.height;
   ctx.clearRect(0,0,W,H);
@@ -2208,6 +2298,7 @@ const WOOD_IMG_URLS=[
 ];
 const _woodImgs=new Array(10).fill(null);
 let _woodImgsLoaded=0;
+let _btnWoodIdx={r:0,b:0}; // 버튼용 고정 패턴 인덱스
 function preloadWoodImages(){
   WOOD_IMG_URLS.forEach((url,i)=>{
     const img=new Image();
@@ -2306,6 +2397,8 @@ let pWoodGrains=[],cWoodGrains=[];
 function assignWoodGrains(){
   pWoodGrains=Array.from({length:11},()=>Math.floor(Math.random()*WOOD_GRAINS.length));
   cWoodGrains=Array.from({length:11},()=>Math.floor(Math.random()*WOOD_GRAINS.length));
+  _btnWoodIdx.r=Math.floor(Math.random()*10);
+  _btnWoodIdx.b=Math.floor(Math.random()*10);
 }
 
 function drawWoodBlock(ctx,x,y,col,isBot,grainIdx){
@@ -2442,7 +2535,7 @@ function tryRemove(st,col,isPlayer){
   if(bottom!==pressCol){
     SFX.wrong();sfxVol=_sv;vib([38,55,38]);if(st.combo>1)hideCombo(isPlayer);st.combo=1;st.shakeF=10;st.score=Math.max(0,st.score-50);st.blocked=true;st.blockUntil=now+1500;setFaceTgt(2);updateScoreUI();if(isPlayer)setMsg('오입력! -50점 · 1.5초');return false;
   }
-  SFX.crack(pressCol);sfxVol=_sv;
+  if(isPlayer&&shopItems.woodBlock&&shopItems.woodBlock.equipped)SFX.woodCrack();else SFX.crack(pressCol);sfxVol=_sv;
   const H2=document.getElementById(isPlayer?'pc':'cc').height;
   spawnP(isPlayer,pressCol,BX+BW/2,H2-BH-4+BH/2);
   const easyC=st.eff.easyC>now;
