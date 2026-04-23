@@ -1405,6 +1405,26 @@ const SFX={
 
 // BGM
 let bgmCtx=null,bgmGain=null,bgmNodes=[],bgmType=null;
+
+// ════════ SHOP BGM ════════
+let _shopAudio=null;
+function playShopBGM(){
+  if(!_shopAudio){
+    _shopAudio=new Audio('https://raw.githubusercontent.com/minos8458-web/duonix-2/main/in_shop.mp3');
+    _shopAudio.loop=true;
+    _shopAudio.crossOrigin='anonymous';
+  }
+  _shopAudio.volume=bgmVol*.85;
+  _shopAudio.currentTime=0;
+  _shopAudio.play().catch(()=>{});
+}
+function stopShopBGM(){
+  if(_shopAudio){_shopAudio.pause();_shopAudio.currentTime=0;}
+}
+function updateShopBGMVol(){
+  if(_shopAudio)_shopAudio.volume=bgmVol*.85;
+}
+
 function stopBGM(){bgmNodes.forEach(n=>{try{n.stop();}catch(e){}});bgmNodes=[];bgmType=null;}
 function stopTitleAudio(){if(window._titleBufSrc){try{window._titleBufSrc.stop();}catch(e){}window._titleBufSrc=null;}}
 function startBGM(type){
@@ -1423,7 +1443,7 @@ function startBGM(type){
       playGameBGM(a,bgmGain);}catch(e){}
   }
 }
-function updateBGMVol(){if(bgmGain)bgmGain.gain.value=bgmVol*.6;}
+function updateBGMVol(){if(bgmGain)bgmGain.gain.value=bgmVol*.6;updateShopBGMVol();}
 function playTitleBGM(){
   // Web Audio fetch 방식 — AudioContext 기반이라 브라우저 차단 없음
   if(window._titleBufSrc){try{window._titleBufSrc.stop();}catch(e){}}
@@ -3308,7 +3328,7 @@ setupCardTouch(document.getElementById('mc-single'),()=>{SFX.btnMenu();showOv('d
 setupCardTouch(document.getElementById('mc-multi'),()=>{SFX.btnMenu();showComing();});
 setupCardTouch(document.getElementById('mc-stat'),()=>{SFX.btnMenu();updateStatUI();slide('scr-title','scr-stats','L');});
 setupCardTouch(document.getElementById('mc-achv'),()=>{SFX.btnMenu();showComing();});
-setupCardTouch(document.getElementById('mc-shop'),()=>{SFX.btnMenu();updateCoinUI();initShopButtons();slide('scr-title','scr-shop','L');});
+setupCardTouch(document.getElementById('mc-shop'),()=>{SFX.btnMenu();updateCoinUI();initShopButtons();stopTitleAudio();playShopBGM();slide('scr-title','scr-shop','L');});
 setupCardTouch(document.getElementById('mc-opt'),()=>{SFX.btnMenu();renderColorPickers();initOptPreviewBtns();slide('scr-title','scr-opt','L');});
 
 // difficulty cards
@@ -3349,7 +3369,7 @@ document.getElementById('confirm-yes').addEventListener('click',function(){press
 document.getElementById('confirm-no').addEventListener('click',function(){pressBtn(this,()=>{SFX.btnCancel();document.getElementById('confirm-ov').classList.remove('show');showOv('diff-ov');});});
 
 // back buttons
-setupCardTouch(document.getElementById('shop-back'),()=>{SFX.btnMenu();slide('scr-shop','scr-title','R');stopTitleAudio();});
+setupCardTouch(document.getElementById('shop-back'),()=>{SFX.btnMenu();stopShopBGM();slide('scr-shop','scr-title','R');});
 setupCardTouch(document.getElementById('stats-back'),()=>{SFX.btnMenu();slide('scr-stats','scr-title','R');stopTitleAudio();});
 setupCardTouch(document.getElementById('opt-back'),()=>{SFX.btnMenu();slide('scr-opt','scr-title','R');stopTitleAudio();});
 
