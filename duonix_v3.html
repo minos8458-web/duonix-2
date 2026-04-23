@@ -1406,29 +1406,60 @@ const SFX={
 // BGM
 let bgmCtx=null,bgmGain=null,bgmNodes=[],bgmType=null;
 
-// ════════ SHOP BGM ════════
-let _shopAudio=null;
+// ════════ SHOP BGM (Web Audio fetch 방식) ════════
+let _shopBuf=null,_shopBufSrc=null,_shopBGMGain=null;
+function prefetchShopBuf(){
+  if(_shopBuf||window._shopFetching)return;
+  window._shopFetching=true;
+  fetch('https://raw.githubusercontent.com/minos8458-web/duonix-2/main/in_shop.mp3')
+    .then(r=>r.arrayBuffer())
+    .then(ab=>{
+      if(!bgmCtx)bgmCtx=new(window.AudioContext||window.webkitAudioContext)();
+      bgmCtx.decodeAudioData(ab,buf=>{
+        _shopBuf=buf;window._shopFetching=false;
+      },()=>{window._shopFetching=false;});
+    }).catch(()=>{window._shopFetching=false;});
+}
+prefetchShopBuf();
+
+function _playShopBuf(buf){
+  if(!bgmCtx)bgmCtx=new(window.AudioContext||window.webkitAudioContext)();
+  if(bgmCtx.state==='suspended')bgmCtx.resume();
+  if(!_shopBGMGain){_shopBGMGain=bgmCtx.createGain();_shopBGMGain.connect(bgmCtx.destination);}
+  _shopBGMGain.gain.value=bgmVol*.6;
+  if(_shopBufSrc){try{_shopBufSrc.stop();}catch(e){}}
+  const src=bgmCtx.createBufferSource();
+  src.buffer=buf;src.loop=true;
+  src.connect(_shopBGMGain);src.start();
+  _shopBufSrc=src;
+}
 function playShopBGM(){
-  if(!_shopAudio){
-    _shopAudio=new Audio('https://raw.githubusercontent.com/minos8458-web/duonix-2/main/in_shop.mp3');
-    _shopAudio.loop=true;
-    _shopAudio.crossOrigin='anonymous';
-  }
-  _shopAudio.volume=bgmVol*.85;
-  _shopAudio.currentTime=0;
-  // AudioContext unlock 후 재생
   if(!bgmCtx)bgmCtx=new(window.AudioContext||window.webkitAudioContext)();
   if(bgmCtx.state==='suspended'){
-    bgmCtx.resume().then(()=>_shopAudio.play().catch(()=>{}));
+    bgmCtx.resume().then(()=>{
+      if(_shopBuf)_playShopBuf(_shopBuf);
+      else{
+        fetch('https://raw.githubusercontent.com/minos8458-web/duonix-2/main/in_shop.mp3')
+          .then(r=>r.arrayBuffer()).then(ab=>{
+            bgmCtx.decodeAudioData(ab,buf=>{_shopBuf=buf;_playShopBuf(buf);});
+          }).catch(()=>{});
+      }
+    });
   } else {
-    _shopAudio.play().catch(()=>{});
+    if(_shopBuf){_playShopBuf(_shopBuf);}
+    else{
+      fetch('https://raw.githubusercontent.com/minos8458-web/duonix-2/main/in_shop.mp3')
+        .then(r=>r.arrayBuffer()).then(ab=>{
+          bgmCtx.decodeAudioData(ab,buf=>{_shopBuf=buf;_playShopBuf(buf);});
+        }).catch(()=>{});
+    }
   }
 }
 function stopShopBGM(){
-  if(_shopAudio){_shopAudio.pause();_shopAudio.currentTime=0;}
+  if(_shopBufSrc){try{_shopBufSrc.stop();}catch(e){}}_shopBufSrc=null;
 }
 function updateShopBGMVol(){
-  if(_shopAudio)_shopAudio.volume=bgmVol*.85;
+  if(_shopBGMGain)_shopBGMGain.gain.value=bgmVol*.6;
 }
 
 function stopBGM(){bgmNodes.forEach(n=>{try{n.stop();}catch(e){}});bgmNodes=[];bgmType=null;}
@@ -3443,34 +3474,34 @@ document.addEventListener('keydown',e=>{
   if(!gameActive)return;
   if(e.key==='z'||e.key==='Z'){e.preventDefault();triggerRemove('R');}
   if(e.key==='x'||e.key==='X'){e.preventDefault();triggerRemove('B');}
-  if(e.key==='1')useItem(P,0,true);if(e.key==='2')useItem(P,1,true);if(e.key==='3')useItem(P,2,true);if(e.key==='4')useItem(P,3,true);if(e.key==='5')useItem(P,4,true);
-});
+  if ( e.key === ' 1 ' ) useItem ( P , 0 , true ) ; if ( e.key === ' 2 ' ) useItem ( P , 1 , true ) ; if ( e.key === ' 3 ' ) useItem ( P , 2 , true ) ; if ( e.key === ' 4 ' ) useItem ( P , 3 , true ) ; if ( e.key === ' 5 ' ) useItem ( P , 4 , true ) ;
+} ) ;
 
-// color pickers
-renderColorPickers();
-setupSwipe();
-window.addEventListener('resize',()=>{if(gameActive)sizeC();});
-sizeC();
-function _unlockAudio(){
-  if(!bgmCtx)bgmCtx=new(window.AudioContext||window.webkitAudioContext)();
-  if(bgmCtx.state==='suspended')bgmCtx.resume();
+// 색상 선택기
+renderColorPickers ( ) ;
+setupSwipe ( ) ;
+window.addEventListener ( ' resize' , ( ) = > { if ( gameActive ) sizeC ( ) ; } ) ;
+크기C ( ) ;
+함수  _unlockAudio ( ) {
+  만약 bgmCtx 가 존재 하지 않으면 bgmCtx 를 new ( window.AudioContext || window.webkitAudioContext ) ( ) ;​​​
+  만약 bgmCtx.state 가 ' suspended ' 이면 bgmCtx.resume ( ) ;​​​
 }
-function forcePlayTitle(){
-  // 이미 타이틀 BGM 재생 중이면 재시작 안 함
-  if(bgmType==='title'&&window._titleBufSrc)return;
-  stopBGM();
-  bgmType='title';
-  if(!bgmCtx)bgmCtx=new(window.AudioContext||window.webkitAudioContext)();
-  if(bgmCtx.state==='suspended')bgmCtx.resume();
-  playTitleBGM();
+function  forcePlayTitle ( ) {
+  // 이미 타이틀 BGM 게임 중 하나가 없습니다.
+  만약 bgmType 이 ' title' 이고 window._titleBufSrc 가 ' title ' 이 아니면 , return ;
+  배경음악을 중지합니다 ( ) ;
+  bgmType = 'title' ;
+  만약 bgmCtx 가 존재 하지 않으면 bgmCtx 를 new ( window.AudioContext || window.webkitAudioContext ) ( ) ;​​​
+  만약 bgmCtx.state 가 ' suspended ' 이면 bgmCtx.resume ( ) ;​​​
+  playTitleBGM ( ) ;
 }
-// 첫 터치/클릭에서 오디오 잠금 해제 + 음악 시작
+// 첫 번째 터치/클릭에서 잠금 해제된 오디오 + 음악 시작
 document.addEventListener('touchstart',_unlockAudio,{once:true});
 document.addEventListener('click',_unlockAudio,{once:true});
 // 타이틀 화면 터치 → 음악 시작
 function tryStartTitleMusic(){
   // 상점 BGM 재생 중이면 무시
-  if(_shopAudio&&!_shopAudio.paused)return;
+  if(_shopBufSrc)return;
   // 이미 타이틀 BGM 재생 중이면 무시
   if(bgmType==='title'&&window._titleBufSrc)return;
   if(!bgmCtx)bgmCtx=new(window.AudioContext||window.webkitAudioContext)();
