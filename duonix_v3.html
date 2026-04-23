@@ -3474,28 +3474,28 @@ document.addEventListener('keydown',e=>{
   if(!gameActive)return;
   if(e.key==='z'||e.key==='Z'){e.preventDefault();triggerRemove('R');}
   if(e.key==='x'||e.key==='X'){e.preventDefault();triggerRemove('B');}
-  if ( e.key === ' 1 ' ) useItem ( P , 0 , true ) ; if ( e.key === ' 2 ' ) useItem ( P , 1 , true ) ; if ( e.key === ' 3 ' ) useItem ( P , 2 , true ) ; if ( e.key === ' 4 ' ) useItem ( P , 3 , true ) ; if ( e.key === ' 5 ' ) useItem ( P , 4 , true ) ;
-} ) ;
+  if(e.key==='1')useItem(P,0,true);if(e.key==='2')useItem(P,1,true);if(e.key==='3')useItem(P,2,true);if(e.key==='4')useItem(P,3,true);if(e.key==='5')useItem(P,4,true);
+});
 
-// 색상 선택기
-renderColorPickers ( ) ;
-setupSwipe ( ) ;
-window.addEventListener ( ' resize' , ( ) = > { if ( gameActive ) sizeC ( ) ; } ) ;
-크기C ( ) ;
-함수  _unlockAudio ( ) {
-  만약 bgmCtx 가 존재 하지 않으면 bgmCtx 를 new ( window.AudioContext || window.webkitAudioContext ) ( ) ;​​​
-  만약 bgmCtx.state 가 ' suspended ' 이면 bgmCtx.resume ( ) ;​​​
+// color pickers
+renderColorPickers();
+setupSwipe();
+window.addEventListener('resize',()=>{if(gameActive)sizeC();});
+sizeC();
+function _unlockAudio(){
+  if(!bgmCtx)bgmCtx=new(window.AudioContext||window.webkitAudioContext)();
+  if(bgmCtx.state==='suspended')bgmCtx.resume();
 }
-function  forcePlayTitle ( ) {
-  // 이미 타이틀 BGM 게임 중 하나가 없습니다.
-  만약 bgmType 이 ' title' 이고 window._titleBufSrc 가 ' title ' 이 아니면 , return ;
-  배경음악을 중지합니다 ( ) ;
-  bgmType = 'title' ;
-  만약 bgmCtx 가 존재 하지 않으면 bgmCtx 를 new ( window.AudioContext || window.webkitAudioContext ) ( ) ;​​​
-  만약 bgmCtx.state 가 ' suspended ' 이면 bgmCtx.resume ( ) ;​​​
-  playTitleBGM ( ) ;
+function forcePlayTitle(){
+  // 이미 타이틀 BGM 재생 중이면 재시작 안 함
+  if(bgmType==='title'&&window._titleBufSrc)return;
+  stopBGM();
+  bgmType='title';
+  if(!bgmCtx)bgmCtx=new(window.AudioContext||window.webkitAudioContext)();
+  if(bgmCtx.state==='suspended')bgmCtx.resume();
+  playTitleBGM();
 }
-// 첫 번째 터치/클릭에서 잠금 해제된 오디오 + 음악 시작
+// 첫 터치/클릭에서 오디오 잠금 해제 + 음악 시작
 document.addEventListener('touchstart',_unlockAudio,{once:true});
 document.addEventListener('click',_unlockAudio,{once:true});
 // 타이틀 화면 터치 → 음악 시작
