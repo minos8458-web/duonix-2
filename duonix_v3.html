@@ -1416,7 +1416,13 @@ function playShopBGM(){
   }
   _shopAudio.volume=bgmVol*.85;
   _shopAudio.currentTime=0;
-  _shopAudio.play().catch(()=>{});
+  // AudioContext unlock 후 재생
+  if(!bgmCtx)bgmCtx=new(window.AudioContext||window.webkitAudioContext)();
+  if(bgmCtx.state==='suspended'){
+    bgmCtx.resume().then(()=>_shopAudio.play().catch(()=>{}));
+  } else {
+    _shopAudio.play().catch(()=>{});
+  }
 }
 function stopShopBGM(){
   if(_shopAudio){_shopAudio.pause();_shopAudio.currentTime=0;}
@@ -1444,12 +1450,34 @@ function startBGM(type){
   }
 }
 function updateBGMVol(){if(bgmGain)bgmGain.gain.value=bgmVol*.6;updateShopBGMVol();}
+function prefetchTitleBuf(){
+  // 페이지 로드 시 백그라운드 fetch (재생은 안 함)
+  if(window._titleBuf||window._titleFetching)return;
+  window._titleFetching=true;
+  fetch('https://raw.githubusercontent.com/minos8458-web/duonix-2/main/one_more_credit.mp3')
+    .then(r=>r.arrayBuffer())
+    .then(ab=>{
+      // AudioContext는 터치 후에 생성되므로 일단 ArrayBuffer만 보관
+      window._titleAB=ab;
+      window._titleFetching=false;
+    }).catch(()=>{window._titleFetching=false;});
+}
+prefetchTitleBuf(); // 즉시 백그라운드 로드 시작
+
 function playTitleBGM(){
-  // Web Audio fetch 방식 — AudioContext 기반이라 브라우저 차단 없음
   if(window._titleBufSrc){try{window._titleBufSrc.stop();}catch(e){}}
-  if(window._titleBuf){
-    _playTitleBuf(window._titleBuf);return;
+  // 이미 디코딩된 버퍼가 있으면 바로 재생
+  if(window._titleBuf){_playTitleBuf(window._titleBuf);return;}
+  // ArrayBuffer가 준비됐으면 디코딩 후 재생
+  if(window._titleAB){
+    if(!bgmCtx)bgmCtx=new(window.AudioContext||window.webkitAudioContext)();
+    bgmCtx.decodeAudioData(window._titleAB.slice(0),buf=>{
+      window._titleBuf=buf;
+      if(bgmType==='title')_playTitleBuf(buf);
+    });
+    return;
   }
+  // 아직 fetch 안 됐으면 fetch + 디코딩
   fetch('https://raw.githubusercontent.com/minos8458-web/duonix-2/main/one_more_credit.mp3')
     .then(r=>r.arrayBuffer())
     .then(ab=>{
@@ -3428,6 +3456,8 @@ function _unlockAudio(){
   if(bgmCtx.state==='suspended')bgmCtx.resume();
 }
 function forcePlayTitle(){
+  // 이미 타이틀 BGM 재생 중이면 재시작 안 함
+  if(bgmType==='title'&&window._titleBufSrc)return;
   stopBGM();
   bgmType='title';
   if(!bgmCtx)bgmCtx=new(window.AudioContext||window.webkitAudioContext)();
@@ -3439,6 +3469,10 @@ document.addEventListener('touchstart',_unlockAudio,{once:true});
 document.addEventListener('click',_unlockAudio,{once:true});
 // 타이틀 화면 터치 → 음악 시작
 function tryStartTitleMusic(){
+  // 상점 BGM 재생 중이면 무시
+  if(_shopAudio&&!_shopAudio.paused)return;
+  // 이미 타이틀 BGM 재생 중이면 무시
+  if(bgmType==='title'&&window._titleBufSrc)return;
   if(!bgmCtx)bgmCtx=new(window.AudioContext||window.webkitAudioContext)();
   if(bgmCtx.state==='suspended')bgmCtx.resume().then(()=>forcePlayTitle());
   else forcePlayTitle();
