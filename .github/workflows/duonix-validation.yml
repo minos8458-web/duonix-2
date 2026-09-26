@@ -1,0 +1,84 @@
+name: DUONIX TC-01 validation
+
+on:
+  push:
+    branches:
+      - automation/tc-01-tooling-bootstrap
+  pull_request:
+    branches:
+      - automation/auto-001-bootstrap
+
+permissions:
+  contents: read
+
+jobs:
+  validate-tc01:
+    runs-on: ubuntu-24.04
+    env:
+      REQUIRED_BASE_SHA: 8a08658222e19a5cb542f6d7975505c88ae72369
+      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      PR_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+      EVIDENCE_DIR: ${{ runner.temp }}/tc01
+
+    steps:
+      - name: Enforce TC-01 event identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            [[ "$GITHUB_HEAD_REF" == "automation/tc-01-tooling-bootstrap" ]] || {
+              echo "BASELINE_MISMATCH: unexpected pull request head ref" >&2
+              exit 1
+            }
+            [[ "$GITHUB_BASE_REF" == "automation/auto-001-bootstrap" ]] || {
+              echo "BASELINE_MISMATCH: unexpected pull request base ref" >&2
+              exit 1
+            }
+            [[ "$PR_BASE_SHA" == "$REQUIRED_BASE_SHA" ]] || {
+              echo "BASELINE_MISMATCH: unexpected pull request base SHA" >&2
+              exit 1
+            }
+          else
+            [[ "$GITHUB_REF_NAME" == "automation/tc-01-tooling-bootstrap" ]] || {
+              echo "BASELINE_MISMATCH: unexpected push branch" >&2
+              exit 1
+            }
+          fi
+
+      - name: Checkout exact candidate
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ env.CANDIDATE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify exact checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual_sha="$(git rev-parse HEAD)"
+          [[ "$actual_sha" == "$CANDIDATE_SHA" ]] || {
+            echo "BASELINE_MISMATCH: checkout HEAD $actual_sha does not equal CANDIDATE_SHA $CANDIDATE_SHA" >&2
+            exit 1
+          }
+
+      - name: Set up Node 24
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.x
+
+      - name: Prepare external evidence directory
+        shell: bash
+        run: mkdir -p "$EVIDENCE_DIR"
+
+      - name: Run deterministic TC-01 validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --version | grep -E '^v24\.'
+          node scripts/validate-task-contract.js automation/contracts/tc-01-tooling-bootstrap.json
+          node scripts/validate-changed-paths.js automation/contracts/tc-01-tooling-bootstrap.json "$REQUIRED_BASE_SHA" "$CANDIDATE_SHA"
+          node scripts/validate-smoke.js
+          node scripts/test-tooling-bootstrap.js
+          node scripts/validate-tooling-bootstrap.js automation/contracts/tc-01-tooling-bootstrap.json "$REQUIRED_BASE_SHA" "$CANDIDATE_SHA" "$EVIDENCE_DIR/tc01-validation-evidence.json"
+          cat "$EVIDENCE_DIR/tc01-validation-evidence.json"

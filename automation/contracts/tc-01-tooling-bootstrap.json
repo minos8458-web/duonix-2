@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "task_id": "TC-01",
+  "task_type": "TOOLING_BOOTSTRAP",
+  "architecture": {
+    "name": "TC-01 TOOLING BOOTSTRAP ARCHITECTURE",
+    "version": "1.1",
+    "sha256": "bdb69631dcd8fcecb22cc18b544e1109a891a6917b7f06e47259ba660878e205"
+  },
+  "required_base_sha": "8a08658222e19a5cb542f6d7975505c88ae72369",
+  "required_branch": "automation/tc-01-tooling-bootstrap",
+  "required_pr_base_branch": "automation/auto-001-bootstrap",
+  "required_pr_base_sha": "8a08658222e19a5cb542f6d7975505c88ae72369",
+  "expected_change_mode": "EXACT_ADDITIVE_SET",
+  "allowed_paths": [
+    ".github/workflows/duonix-validation.yml",
+    "automation/contracts/tc-01-tooling-bootstrap.json",
+    "scripts/validate-task-contract.js",
+    "scripts/validate-changed-paths.js",
+    "scripts/validate-tooling-bootstrap.js",
+    "scripts/test-tooling-bootstrap.js",
+    "state/TC-01-tooling-bootstrap.md"
+  ],
+  "workflow": {
+    "runner": "ubuntu-24.04",
+    "node_version": "24.x",
+    "runtime_evidence_directory": "${RUNNER_TEMP}/tc01/",
+    "permissions": {
+      "contents": "read"
+    },
+    "checkout": {
+      "action": "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+      "ref": "CANDIDATE_SHA",
+      "fetch_depth": 0,
+      "persist_credentials": false
+    },
+    "setup_node_action": "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020"
+  },
+  "validator_exit_codes": {
+    "pass": 0,
+    "deterministic_validation_fail": 1,
+    "invalid_invocation_or_config": 2,
+    "environment_or_precondition_blocked": 3
+  },
+  "auto_fix_allowed": false,
+  "max_auto_fix_cycles": 1,
+  "eligible_auto_fix_failure_classes": [],
+  "final_success_state": "VALIDATED / REVIEWED / AWAITING CONTROL TOWER OR USER DISPOSITION"
+}
