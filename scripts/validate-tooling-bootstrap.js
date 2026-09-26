@@ -184,6 +184,14 @@ function evidencePathIsExternal(evidencePath) {
 }
 
 function main(argv) {
+  const nodeVersion = process.versions.node;
+  const nodeMajor = Number.parseInt(nodeVersion.split('.')[0], 10);
+  if (nodeMajor !== 24) {
+    console.error('TC-01 tooling bootstrap validation: BLOCKED');
+    console.error(`- RUNTIME_MISMATCH: Node 24.x required, received ${nodeVersion}`);
+    return 3;
+  }
+
   if (argv.length !== 4) {
     console.error('TC-01 tooling bootstrap validation: CONFIG ERROR');
     console.error('usage: node scripts/validate-tooling-bootstrap.js <contract.json> <base-commit> <candidate-commit> <external-evidence.json>');

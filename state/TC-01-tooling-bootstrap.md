@@ -7,7 +7,7 @@
 - REQUIRED_BASE_SHA: `8a08658222e19a5cb542f6d7975505c88ae72369`
 - WORK_BRANCH: `automation/tc-01-tooling-bootstrap`
 - CANDIDATE_SHA: `미확인 — authoritative value recorded in external validation evidence / Control Tower checkpoint`
-- LAST_VALIDATED_SHA: `2abaf5839546dee412d82124313e3cc10ca46048`
+- LAST_VALIDATED_SHA: `adeac90cef880045729172a6d6f3ba373eeb82b0`
 - PR_NUMBER: `미확인`
 - PR_BASE: `automation/auto-001-bootstrap`
 - PR_BASE_SHA: `8a08658222e19a5cb542f6d7975505c88ae72369`
@@ -24,7 +24,7 @@
 - AUTO_FIX_CYCLES_USED: `0`
 - FAILURE_CLASS: `미확인`
 - SCOPE_VIOLATION: `미확인`
-- CONTROL_TOWER_DISPOSITION: `MANUAL ARCHITECTURE-ALIGNMENT CORRECTION AUTHORIZED`
-- NEXT_SINGLE_ACTION: `Run external deterministic validation and return a new candidate review export to Control Tower.`
+- CONTROL_TOWER_DISPOSITION: `FINAL DIRECT-REVIEW CORRECTION AUTHORIZED`
+- NEXT_SINGLE_ACTION: `Run full deterministic revalidation for the new candidate and return a new review export to No.8 Control Tower.`
 
 The candidate SHA is intentionally not self-recorded in this repository. The external validation evidence and Control Tower checkpoint are authoritative.
