@@ -22,6 +22,9 @@
     "state/TC-01-tooling-bootstrap.md"
   ],
   "workflow": {
+    "job_key": "deterministic-validation",
+    "job_name": "deterministic-validation",
+    "timeout_minutes": 10,
     "runner": "ubuntu-24.04",
     "node_version": "24.x",
     "runtime_evidence_directory": "${RUNNER_TEMP}/tc01/",
@@ -29,12 +32,23 @@
       "contents": "read"
     },
     "checkout": {
-      "action": "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+      "action": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
       "ref": "CANDIDATE_SHA",
       "fetch_depth": 0,
       "persist_credentials": false
     },
-    "setup_node_action": "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020"
+    "setup_node_action": "actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+    "upload_artifact": {
+      "action": "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+      "name": "tc-01-validation-evidence-<CANDIDATE_SHA>",
+      "retention_days": 30
+    },
+    "evidence_files": [
+      "tc01-validation-evidence.json",
+      "changed-paths.txt",
+      "changed-modes-raw.txt",
+      "self-test-evidence.json"
+    ]
   },
   "validator_exit_codes": {
     "pass": 0,

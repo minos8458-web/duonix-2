@@ -8,6 +8,7 @@ const { spawnSync } = require('child_process');
 const { loadAndValidateContract, ContractConfigError } = require('./validate-task-contract');
 
 const repositoryRoot = path.resolve(__dirname, '..');
+const UNKNOWN = '미확인';
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
@@ -31,6 +32,29 @@ function resolveCommit(revision) {
   return result.stdout.trim();
 }
 
+function resolveOptionalRef(revision) {
+  const result = run('git', ['rev-parse', '--verify', `${revision}^{commit}`]);
+  return result.exit_code === 0 ? result.stdout.trim() : UNKNOWN;
+}
+
+function classifyExit(exitCode) {
+  if (exitCode === 0) return 'PASS';
+  if (exitCode === 1) return 'FAIL';
+  if (exitCode === 2) return 'CONFIG_ERROR';
+  return 'BLOCKED';
+}
+
+function commandEvidence(name, result, classification = classifyExit(result.exit_code)) {
+  return {
+    name,
+    command: result.command,
+    exit_code: result.exit_code,
+    classification,
+    stdout: result.stdout,
+    stderr: result.stderr,
+  };
+}
+
 function workflowFailures(contract) {
   const workflowPath = path.join(repositoryRoot, contract.allowed_paths[0]);
   let workflow;
@@ -45,6 +69,9 @@ function workflowFailures(contract) {
   };
 
   if (/pull_request_target\s*:/.test(workflow)) failures.push('WORKFLOW_CONTRACT: pull_request_target is forbidden');
+  requirePattern('deterministic-validation job key', /jobs:\s*\n\s+deterministic-validation:/);
+  requirePattern('deterministic-validation job name', /name:\s*deterministic-validation/);
+  requirePattern('ten minute timeout', /timeout-minutes:\s*10/);
   requirePattern('push branch', /push:[\s\S]*?branches:[\s\S]*?- automation\/tc-01-tooling-bootstrap/);
   requirePattern('pull request base branch', /pull_request:[\s\S]*?branches:[\s\S]*?- automation\/auto-001-bootstrap/);
   requirePattern('contents read permission', /permissions:\s*\n\s+contents:\s*read/);
@@ -56,6 +83,15 @@ function workflowFailures(contract) {
   requirePattern('credentials disabled', /persist-credentials:\s*false/);
   requirePattern('exact checkout verification', /git rev-parse HEAD/);
   requirePattern('immutable setup-node action', new RegExp(contract.workflow.setup_node_action.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  requirePattern('immutable upload-artifact action', new RegExp(contract.workflow.upload_artifact.action.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  requirePattern('candidate-specific artifact name', /name:\s*tc-01-validation-evidence-\$\{\{\s*env\.CANDIDATE_SHA\s*\}\}/);
+  requirePattern('artifact retention', /retention-days:\s*30/);
+  for (const evidenceFile of contract.workflow.evidence_files) {
+    requirePattern(`evidence file ${evidenceFile}`, new RegExp(evidenceFile.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
+  requirePattern('changed-path evidence CLI', /validate-changed-paths\.js[^\n]*"\$EVIDENCE_DIR"/);
+  requirePattern('self-test evidence CLI', /test-tooling-bootstrap\.js\s+"\$EVIDENCE_DIR"/);
+  requirePattern('final clean worktree gate', /git status --porcelain/);
   requirePattern('external runner temp evidence', /runner\.temp[^\n]*tc01|RUNNER_TEMP[^\n]*tc01/i);
   if (/\b(?:npm|pnpm|yarn)\s+(?:install|ci)\b/.test(workflow)) failures.push('WORKFLOW_CONTRACT: package installation is forbidden');
   return failures;
@@ -129,36 +165,110 @@ function main(argv) {
     return code;
   }
 
-  const checks = [
-    run(process.execPath, [path.join(__dirname, 'validate-task-contract.js'), path.resolve(argv[0])]),
-    run(process.execPath, [path.join(__dirname, 'validate-changed-paths.js'), path.resolve(argv[0]), baseSha, candidateSha]),
-    run(process.execPath, [path.join(__dirname, 'validate-smoke.js')]),
-    run(process.execPath, [path.join(__dirname, 'test-tooling-bootstrap.js')]),
+  const evidenceDirectory = path.dirname(evidencePath);
+  const diffCheck = run('git', ['diff', '--check', baseSha, candidateSha]);
+  const ancestryCheck = run('git', ['merge-base', '--is-ancestor', baseSha, candidateSha]);
+  const contractCheck = run(process.execPath, [
+    path.join(__dirname, 'validate-task-contract.js'), path.resolve(argv[0]),
+  ]);
+  const changedPathsCheck = run(process.execPath, [
+    path.join(__dirname, 'validate-changed-paths.js'),
+    path.resolve(argv[0]),
+    baseSha,
+    candidateSha,
+    evidenceDirectory,
+  ]);
+  const smokeCheck = run(process.execPath, [path.join(__dirname, 'validate-smoke.js')]);
+  const selfTestCheck = run(process.execPath, [
+    path.join(__dirname, 'test-tooling-bootstrap.js'), evidenceDirectory,
+  ]);
+  const worktreeCheck = run('git', ['status', '--porcelain']);
+  const worktreeCleanAfter = worktreeCheck.exit_code === 0 && worktreeCheck.stdout.trim() === '';
+  const commands = [
+    commandEvidence('git-diff-check', diffCheck),
+    commandEvidence('ancestry-check', ancestryCheck),
+    commandEvidence('validate-task-contract', contractCheck),
+    commandEvidence('validate-changed-paths', changedPathsCheck),
+    commandEvidence('validate-smoke', smokeCheck),
+    commandEvidence('test-tooling-bootstrap', selfTestCheck),
+    commandEvidence('worktree-clean-after', worktreeCheck, worktreeCleanAfter ? 'PASS' : 'FAIL'),
   ];
   const failures = [
     ...contractFailures.map((failure) => `CONTRACT: ${failure}`),
     ...workflowFailures(contract),
     ...eventFailures(contract, baseSha, candidateSha),
   ];
-  for (const check of checks) {
-    if (check.exit_code !== 0) failures.push(`COMMAND_FAILED(${check.exit_code}): ${check.command}`);
+  if (ancestryCheck.exit_code === 1) {
+    failures.push(`BASELINE_MISMATCH: ${baseSha} is not an ancestor of ${candidateSha}`);
+  } else if (ancestryCheck.exit_code !== 0) {
+    failures.push(`ANCESTRY_CHECK_BLOCKED(${ancestryCheck.exit_code}): ${ancestryCheck.stderr.trim()}`);
   }
+  for (const command of commands) {
+    if (command.classification !== 'PASS') {
+      failures.push(`COMMAND_${command.classification}(${command.exit_code}): ${command.command}`);
+    }
+  }
+
+  const evidenceFiles = {
+    changed_paths: path.join(evidenceDirectory, 'changed-paths.txt'),
+    changed_modes: path.join(evidenceDirectory, 'changed-modes-raw.txt'),
+    self_test: path.join(evidenceDirectory, 'self-test-evidence.json'),
+  };
+  for (const [label, requiredPath] of Object.entries(evidenceFiles)) {
+    if (!fs.existsSync(requiredPath)) failures.push(`MISSING_EVIDENCE_FILE: ${label} ${requiredPath}`);
+  }
+
+  const readEvidenceLines = (evidenceFile) => (
+    fs.existsSync(evidenceFile)
+      ? fs.readFileSync(evidenceFile, 'utf8').split(/\r?\n/).filter(Boolean)
+      : []
+  );
+  const localBranch = run('git', ['branch', '--show-current']).stdout.trim();
+  const eventName = process.env.GITHUB_EVENT_NAME || 'local';
+  const resolvedBaseBranchSha = process.env.RESOLVED_BASE_BRANCH_SHA
+    || resolveOptionalRef(`refs/remotes/origin/${contract.required_pr_base_branch}`);
+  const hasBlockedCommand = commands.some((command) => command.classification === 'BLOCKED');
+  const finalResult = failures.length === 0 ? 'PASS' : (hasBlockedCommand ? 'BLOCKED' : 'FAIL');
 
   const contractBytes = fs.readFileSync(path.resolve(argv[0]));
   const evidence = {
     schema_version: 1,
     task_id: contract.task_id,
+    repository: process.env.GITHUB_REPOSITORY || UNKNOWN,
     architecture_sha256: contract.architecture.sha256,
     required_base_sha: contract.required_base_sha,
-    base_sha: baseSha,
+    required_branch: contract.required_branch,
+    required_pr_base_branch: contract.required_pr_base_branch,
+    required_pr_base_sha: contract.required_pr_base_sha,
     candidate_sha: candidateSha,
+    event_name: eventName,
+    event_ref: process.env.GITHUB_REF || (localBranch ? `refs/heads/${localBranch}` : UNKNOWN),
+    head_ref: process.env.GITHUB_HEAD_REF || UNKNOWN,
+    base_ref: process.env.GITHUB_BASE_REF || UNKNOWN,
+    event_pr_base_sha: process.env.PR_BASE_SHA || UNKNOWN,
+    resolved_base_branch_sha: resolvedBaseBranchSha,
+    runner_os: process.env.RUNNER_OS || process.platform,
+    runner_arch: process.env.RUNNER_ARCH || process.arch,
     contract_sha256: crypto.createHash('sha256').update(contractBytes).digest('hex'),
     node_version: process.version,
-    event: process.env.GITHUB_EVENT_NAME || 'local',
+    workflow_run_id: process.env.GITHUB_RUN_ID || UNKNOWN,
+    workflow_run_attempt: process.env.GITHUB_RUN_ATTEMPT || UNKNOWN,
+    contract_path: path.relative(repositoryRoot, path.resolve(argv[0])).split(path.sep).join('/'),
+    checkout_fetch_depth: contract.workflow.checkout.fetch_depth,
+    checkout_persist_credentials: contract.workflow.checkout.persist_credentials,
+    changed_paths: readEvidenceLines(evidenceFiles.changed_paths),
+    changed_modes: readEvidenceLines(evidenceFiles.changed_modes),
+    commands,
+    smoke_result: classifyExit(smokeCheck.exit_code),
+    scope_result: classifyExit(changedPathsCheck.exit_code),
+    mode_type_result: classifyExit(changedPathsCheck.exit_code),
+    self_test_result: classifyExit(selfTestCheck.exit_code),
+    evidence_directory: evidenceDirectory,
+    evidence_outside_worktree: evidencePathIsExternal(evidencePath),
+    worktree_clean_after: worktreeCleanAfter,
     auto_fix_allowed: false,
-    result: failures.length === 0 ? 'PASS' : 'FAIL',
+    final_result: finalResult,
     failures,
-    checks,
   };
 
   try {
@@ -171,10 +281,10 @@ function main(argv) {
   }
 
   if (failures.length > 0) {
-    console.error('TC-01 tooling bootstrap validation: FAIL');
+    console.error(`TC-01 tooling bootstrap validation: ${finalResult}`);
     for (const failure of failures) console.error(`- ${failure}`);
     console.error(`evidence: ${evidencePath}`);
-    return 1;
+    return finalResult === 'BLOCKED' ? 3 : 1;
   }
 
   console.log('TC-01 tooling bootstrap validation: PASS');

@@ -12,13 +12,16 @@ permissions:
   contents: read
 
 jobs:
-  validate-tc01:
+  deterministic-validation:
+    name: deterministic-validation
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     env:
       REQUIRED_BASE_SHA: 8a08658222e19a5cb542f6d7975505c88ae72369
+      REQUIRED_PR_BASE_BRANCH: automation/auto-001-bootstrap
       CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       PR_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
-      EVIDENCE_DIR: ${{ runner.temp }}/tc01
+      EVIDENCE_DIR: ${{ runner.temp }}/tc01/
 
     steps:
       - name: Enforce TC-01 event identity
@@ -30,7 +33,7 @@ jobs:
               echo "BASELINE_MISMATCH: unexpected pull request head ref" >&2
               exit 1
             }
-            [[ "$GITHUB_BASE_REF" == "automation/auto-001-bootstrap" ]] || {
+            [[ "$GITHUB_BASE_REF" == "$REQUIRED_PR_BASE_BRANCH" ]] || {
               echo "BASELINE_MISMATCH: unexpected pull request base ref" >&2
               exit 1
             }
@@ -46,13 +49,13 @@ jobs:
           fi
 
       - name: Checkout exact candidate
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ env.CANDIDATE_SHA }}
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Verify exact checkout
+      - name: Verify checkout, base, and ancestry
         shell: bash
         run: |
           set -euo pipefail
@@ -61,9 +64,19 @@ jobs:
             echo "BASELINE_MISMATCH: checkout HEAD $actual_sha does not equal CANDIDATE_SHA $CANDIDATE_SHA" >&2
             exit 1
           }
+          resolved_base_branch_sha="$(git rev-parse "refs/remotes/origin/$REQUIRED_PR_BASE_BRANCH")"
+          [[ "$resolved_base_branch_sha" == "$REQUIRED_BASE_SHA" ]] || {
+            echo "BASELINE_MISMATCH: resolved base branch SHA $resolved_base_branch_sha" >&2
+            exit 1
+          }
+          git merge-base --is-ancestor "$REQUIRED_BASE_SHA" "$CANDIDATE_SHA" || {
+            echo "BASELINE_MISMATCH: required base is not an ancestor of candidate" >&2
+            exit 1
+          }
+          echo "RESOLVED_BASE_BRANCH_SHA=$resolved_base_branch_sha" >> "$GITHUB_ENV"
 
       - name: Set up Node 24
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 24.x
 
@@ -76,9 +89,23 @@ jobs:
         run: |
           set -euo pipefail
           node --version | grep -E '^v24\.'
+          git diff --check "$REQUIRED_BASE_SHA" "$CANDIDATE_SHA"
           node scripts/validate-task-contract.js automation/contracts/tc-01-tooling-bootstrap.json
-          node scripts/validate-changed-paths.js automation/contracts/tc-01-tooling-bootstrap.json "$REQUIRED_BASE_SHA" "$CANDIDATE_SHA"
+          node scripts/validate-changed-paths.js automation/contracts/tc-01-tooling-bootstrap.json "$REQUIRED_BASE_SHA" "$CANDIDATE_SHA" "$EVIDENCE_DIR"
           node scripts/validate-smoke.js
-          node scripts/test-tooling-bootstrap.js
+          node scripts/test-tooling-bootstrap.js "$EVIDENCE_DIR"
           node scripts/validate-tooling-bootstrap.js automation/contracts/tc-01-tooling-bootstrap.json "$REQUIRED_BASE_SHA" "$CANDIDATE_SHA" "$EVIDENCE_DIR/tc01-validation-evidence.json"
-          cat "$EVIDENCE_DIR/tc01-validation-evidence.json"
+          test -z "$(git status --porcelain)"
+
+      - name: Upload TC-01 validation evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: tc-01-validation-evidence-${{ env.CANDIDATE_SHA }}
+          path: |
+            ${{ env.EVIDENCE_DIR }}/tc01-validation-evidence.json
+            ${{ env.EVIDENCE_DIR }}/changed-paths.txt
+            ${{ env.EVIDENCE_DIR }}/changed-modes-raw.txt
+            ${{ env.EVIDENCE_DIR }}/self-test-evidence.json
+          if-no-files-found: error
+          retention-days: 30

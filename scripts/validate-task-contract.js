@@ -26,8 +26,15 @@ const EXPECTED = Object.freeze({
   required_pr_base_branch: 'automation/auto-001-bootstrap',
   expected_change_mode: 'EXACT_ADDITIVE_SET',
   final_success_state: 'VALIDATED / REVIEWED / AWAITING CONTROL TOWER OR USER DISPOSITION',
-  checkout_action: 'actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683',
-  setup_node_action: 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020',
+  checkout_action: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1',
+  setup_node_action: 'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020',
+  upload_artifact_action: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a',
+  evidence_files: Object.freeze([
+    'tc01-validation-evidence.json',
+    'changed-paths.txt',
+    'changed-modes-raw.txt',
+    'self-test-evidence.json',
+  ]),
 });
 
 class ContractConfigError extends Error {}
@@ -88,6 +95,9 @@ function validateContract(contract) {
     failures.push('eligible_auto_fix_failure_classes: expected []');
   }
 
+  equal('workflow.job_key', contract.workflow?.job_key, 'deterministic-validation');
+  equal('workflow.job_name', contract.workflow?.job_name, 'deterministic-validation');
+  equal('workflow.timeout_minutes', contract.workflow?.timeout_minutes, 10);
   equal('workflow.runner', contract.workflow?.runner, 'ubuntu-24.04');
   equal('workflow.node_version', contract.workflow?.node_version, '24.x');
   equal('workflow.runtime_evidence_directory', contract.workflow?.runtime_evidence_directory, '${RUNNER_TEMP}/tc01/');
@@ -97,6 +107,12 @@ function validateContract(contract) {
   equal('workflow.checkout.fetch_depth', contract.workflow?.checkout?.fetch_depth, 0);
   equal('workflow.checkout.persist_credentials', contract.workflow?.checkout?.persist_credentials, false);
   equal('workflow.setup_node_action', contract.workflow?.setup_node_action, EXPECTED.setup_node_action);
+  equal('workflow.upload_artifact.action', contract.workflow?.upload_artifact?.action, EXPECTED.upload_artifact_action);
+  equal('workflow.upload_artifact.name', contract.workflow?.upload_artifact?.name, 'tc-01-validation-evidence-<CANDIDATE_SHA>');
+  equal('workflow.upload_artifact.retention_days', contract.workflow?.upload_artifact?.retention_days, 30);
+  if (!sameArray(contract.workflow?.evidence_files, EXPECTED.evidence_files)) {
+    failures.push(`workflow.evidence_files: expected exact ordered set ${JSON.stringify(EXPECTED.evidence_files)}`);
+  }
 
   equal('validator_exit_codes.pass', contract.validator_exit_codes?.pass, 0);
   equal('validator_exit_codes.deterministic_validation_fail', contract.validator_exit_codes?.deterministic_validation_fail, 1);

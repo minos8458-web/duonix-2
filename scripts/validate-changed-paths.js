@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
 const { spawnSync } = require('child_process');
 const { loadAndValidateContract, ContractConfigError } = require('./validate-task-contract');
 
@@ -30,6 +32,26 @@ function verifyCommit(revision, label) {
     throw new Error(`${label} is not an available commit: ${bufferText(result.stderr) || revision}`);
   }
   return bufferText(result.stdout);
+}
+
+function verifyAncestry(baseRevision, candidateRevision) {
+  const result = runGit(['merge-base', '--is-ancestor', baseRevision, candidateRevision]);
+  if (result.status === 0) return true;
+  if (result.status === 1) return false;
+  throw new Error(`git merge-base --is-ancestor failed: ${bufferText(result.stderr)}`);
+}
+
+function resolveWorktreeRoot() {
+  const result = runGit(['rev-parse', '--show-toplevel']);
+  if (result.status !== 0) {
+    throw new Error(`cannot resolve repository worktree: ${bufferText(result.stderr)}`);
+  }
+  return path.resolve(bufferText(result.stdout));
+}
+
+function isOutsideDirectory(parent, target) {
+  const relative = path.relative(parent, target);
+  return relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative);
 }
 
 function splitNul(buffer) {
@@ -190,10 +212,29 @@ function validateChangedPaths(contract, baseRevision, candidateRevision) {
   return { failures, nameRecords, rawRecords };
 }
 
+function writeEvidence(evidenceDirectory, result) {
+  fs.mkdirSync(evidenceDirectory, { recursive: true });
+  const changedPaths = result.nameRecords.map((record) => {
+    if (record.oldPath) {
+      return `${record.statusToken}\t${JSON.stringify(record.oldPath)}\t${JSON.stringify(record.path)}`;
+    }
+    return `${record.statusToken}\t${JSON.stringify(record.path)}`;
+  });
+  const changedModes = result.rawRecords.map((record) => {
+    const header = `:${record.oldMode} ${record.newMode} ${record.oldObject} ${record.newObject} ${record.status}${record.score}`;
+    if (record.oldPath) {
+      return `${header}\t${JSON.stringify(record.oldPath)}\t${JSON.stringify(record.path)}`;
+    }
+    return `${header}\t${JSON.stringify(record.path)}`;
+  });
+  fs.writeFileSync(path.join(evidenceDirectory, 'changed-paths.txt'), `${changedPaths.join('\n')}\n`, 'utf8');
+  fs.writeFileSync(path.join(evidenceDirectory, 'changed-modes-raw.txt'), `${changedModes.join('\n')}\n`, 'utf8');
+}
+
 function main(argv) {
-  if (argv.length !== 3) {
+  if (argv.length !== 4) {
     console.error('TC-01 changed-path validation: CONFIG ERROR');
-    console.error('usage: node scripts/validate-changed-paths.js <contract.json> <base-commit> <candidate-commit>');
+    console.error('usage: node scripts/validate-changed-paths.js <contract.json> <base-commit> <candidate-commit> <external-evidence-directory>');
     return 2;
   }
 
@@ -206,12 +247,28 @@ function main(argv) {
     }
     const baseSha = verifyCommit(argv[1], 'base revision');
     const candidateSha = verifyCommit(argv[2], 'candidate revision');
+    const worktreeRoot = resolveWorktreeRoot();
+    const evidenceDirectory = path.resolve(argv[3]);
+    if (!isOutsideDirectory(worktreeRoot, evidenceDirectory)) {
+      console.error(`TC-01 changed-path validation: CONFIG ERROR\n- evidence directory must be outside the repository: ${evidenceDirectory}`);
+      return 2;
+    }
     if (baseSha !== contract.required_base_sha) {
       console.error(`TC-01 changed-path validation: FAIL\n- BASELINE_MISMATCH: expected ${contract.required_base_sha}, received ${baseSha}`);
       return 1;
     }
+    if (!verifyAncestry(baseSha, candidateSha)) {
+      console.error(`TC-01 changed-path validation: FAIL\n- BASELINE_MISMATCH: ${baseSha} is not an ancestor of ${candidateSha}`);
+      return 1;
+    }
 
     const result = validateChangedPaths(contract, baseSha, candidateSha);
+    try {
+      writeEvidence(evidenceDirectory, result);
+    } catch (error) {
+      console.error(`TC-01 changed-path validation: BLOCKED\n- cannot write external evidence: ${error.message}`);
+      return 3;
+    }
     if (result.failures.length > 0) {
       console.error('TC-01 changed-path validation: FAIL');
       for (const failure of result.failures) console.error(`- ${failure}`);
@@ -223,6 +280,7 @@ function main(argv) {
     console.log(`candidate: ${candidateSha}`);
     console.log(`exact additive paths: ${result.nameRecords.length}`);
     console.log('mode/type: 100644 blob');
+    console.log(`evidence directory: ${evidenceDirectory}`);
     return 0;
   } catch (error) {
     if (error instanceof ContractConfigError) {
@@ -238,4 +296,4 @@ if (require.main === module) {
   process.exitCode = main(process.argv.slice(2));
 }
 
-module.exports = { parseNameStatus, parseRaw, validateChangedPaths };
+module.exports = { parseNameStatus, parseRaw, validateChangedPaths, verifyAncestry, writeEvidence };
