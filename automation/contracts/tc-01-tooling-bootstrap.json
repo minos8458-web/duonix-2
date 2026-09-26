@@ -2,6 +2,7 @@
   "schema_version": 1,
   "task_id": "TC-01",
   "task_type": "TOOLING_BOOTSTRAP",
+  "repository": "minos8458-web/duonix-2",
   "architecture": {
     "name": "TC-01 TOOLING BOOTSTRAP ARCHITECTURE",
     "version": "1.1",
@@ -12,6 +13,16 @@
   "required_pr_base_branch": "automation/auto-001-bootstrap",
   "required_pr_base_sha": "8a08658222e19a5cb542f6d7975505c88ae72369",
   "expected_change_mode": "EXACT_ADDITIVE_SET",
+  "forbidden_operations": [
+    "DELETE",
+    "RENAME",
+    "MOVE",
+    "FORCE_PUSH",
+    "MERGE",
+    "MAIN_WRITE",
+    "RULESET_CHANGE",
+    "BRANCH_PROTECTION_CHANGE"
+  ],
   "allowed_paths": [
     ".github/workflows/duonix-validation.yml",
     "automation/contracts/tc-01-tooling-bootstrap.json",

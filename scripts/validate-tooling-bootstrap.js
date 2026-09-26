@@ -55,6 +55,41 @@ function commandEvidence(name, result, classification = classifyExit(result.exit
   };
 }
 
+function sameArray(actual, expected) {
+  return Array.isArray(actual)
+    && actual.length === expected.length
+    && actual.every((value, index) => value === expected[index]);
+}
+
+function yamlTriggerBlock(source, trigger) {
+  const lines = source.split(/\r?\n/);
+  const start = lines.findIndex((line) => line === `  ${trigger}:`);
+  if (start === -1) return null;
+
+  let end = start + 1;
+  while (end < lines.length && (lines[end].trim() === '' || /^ {4,}\S/.test(lines[end]))) {
+    end += 1;
+  }
+  return lines.slice(start, end);
+}
+
+function yamlList(block, key) {
+  if (!block) return null;
+  const start = block.findIndex((line) => line === `    ${key}:`);
+  if (start === -1) return null;
+
+  const values = [];
+  for (let index = start + 1; index < block.length; index += 1) {
+    const match = block[index].match(/^ {6}-\s+(.+?)\s*$/);
+    if (!match) {
+      if (block[index].trim() === '') continue;
+      break;
+    }
+    values.push(match[1]);
+  }
+  return values;
+}
+
 function workflowFailures(contract) {
   const workflowPath = path.join(repositoryRoot, contract.allowed_paths[0]);
   let workflow;
@@ -67,8 +102,17 @@ function workflowFailures(contract) {
   const requirePattern = (label, pattern) => {
     if (!pattern.test(workflow)) failures.push(`WORKFLOW_CONTRACT: missing ${label}`);
   };
+  const pullRequestBlock = yamlTriggerBlock(workflow, 'pull_request');
+  const pullRequestTypes = yamlList(pullRequestBlock, 'types');
+  const expectedPullRequestTypes = ['opened', 'synchronize', 'reopened', 'ready_for_review'];
 
   if (/pull_request_target\s*:/.test(workflow)) failures.push('WORKFLOW_CONTRACT: pull_request_target is forbidden');
+  if (pullRequestBlock?.some((line) => /^ {4}paths(?:-ignore)?:/.test(line))) {
+    failures.push('WORKFLOW_CONTRACT: pull_request paths filters are forbidden');
+  }
+  if (!sameArray(pullRequestTypes, expectedPullRequestTypes)) {
+    failures.push(`WORKFLOW_CONTRACT: pull_request types must equal ${JSON.stringify(expectedPullRequestTypes)}`);
+  }
   requirePattern('deterministic-validation job key', /jobs:\s*\n\s+deterministic-validation:/);
   requirePattern('deterministic-validation job name', /name:\s*deterministic-validation/);
   requirePattern('ten minute timeout', /timeout-minutes:\s*10/);
@@ -100,6 +144,9 @@ function workflowFailures(contract) {
 function eventFailures(contract, baseSha, candidateSha) {
   const failures = [];
   const eventName = process.env.GITHUB_EVENT_NAME;
+  if (process.env.GITHUB_REPOSITORY && process.env.GITHUB_REPOSITORY !== contract.repository) {
+    failures.push(`REPOSITORY_MISMATCH: ${process.env.GITHUB_REPOSITORY} != ${contract.repository}`);
+  }
   if (eventName === 'pull_request') {
     if (process.env.GITHUB_HEAD_REF !== contract.required_branch) {
       failures.push(`BASELINE_MISMATCH: PR head ref ${process.env.GITHUB_HEAD_REF || '<empty>'}`);
@@ -234,7 +281,7 @@ function main(argv) {
   const evidence = {
     schema_version: 1,
     task_id: contract.task_id,
-    repository: process.env.GITHUB_REPOSITORY || UNKNOWN,
+    repository: contract.repository,
     architecture_sha256: contract.architecture.sha256,
     required_base_sha: contract.required_base_sha,
     required_branch: contract.required_branch,

@@ -14,10 +14,22 @@ const EXPECTED_PATHS = Object.freeze([
   'state/TC-01-tooling-bootstrap.md',
 ]);
 
+const EXPECTED_FORBIDDEN_OPERATIONS = Object.freeze([
+  'DELETE',
+  'RENAME',
+  'MOVE',
+  'FORCE_PUSH',
+  'MERGE',
+  'MAIN_WRITE',
+  'RULESET_CHANGE',
+  'BRANCH_PROTECTION_CHANGE',
+]);
+
 const EXPECTED = Object.freeze({
   schema_version: 1,
   task_id: 'TC-01',
   task_type: 'TOOLING_BOOTSTRAP',
+  repository: 'minos8458-web/duonix-2',
   architecture_name: 'TC-01 TOOLING BOOTSTRAP ARCHITECTURE',
   architecture_version: '1.1',
   architecture_sha256: 'bdb69631dcd8fcecb22cc18b544e1109a891a6917b7f06e47259ba660878e205',
@@ -76,6 +88,7 @@ function validateContract(contract) {
   equal('schema_version', contract.schema_version, EXPECTED.schema_version);
   equal('task_id', contract.task_id, EXPECTED.task_id);
   equal('task_type', contract.task_type, EXPECTED.task_type);
+  equal('repository', contract.repository, EXPECTED.repository);
   equal('architecture.name', contract.architecture?.name, EXPECTED.architecture_name);
   equal('architecture.version', contract.architecture?.version, EXPECTED.architecture_version);
   equal('architecture.sha256', contract.architecture?.sha256, EXPECTED.architecture_sha256);
@@ -90,6 +103,9 @@ function validateContract(contract) {
 
   if (!sameArray(contract.allowed_paths, EXPECTED_PATHS)) {
     failures.push(`allowed_paths: expected exact ordered set ${JSON.stringify(EXPECTED_PATHS)}`);
+  }
+  if (!sameArray(contract.forbidden_operations, EXPECTED_FORBIDDEN_OPERATIONS)) {
+    failures.push(`forbidden_operations: expected exact ordered list ${JSON.stringify(EXPECTED_FORBIDDEN_OPERATIONS)}`);
   }
   if (!sameArray(contract.eligible_auto_fix_failure_classes, [])) {
     failures.push('eligible_auto_fix_failure_classes: expected []');
@@ -172,6 +188,7 @@ module.exports = {
   ContractConfigError,
   ContractEnvironmentError,
   EXPECTED,
+  EXPECTED_FORBIDDEN_OPERATIONS,
   EXPECTED_PATHS,
   loadAndValidateContract,
   validateContract,
