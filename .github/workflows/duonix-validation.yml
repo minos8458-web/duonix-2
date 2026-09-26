@@ -1,0 +1,118 @@
+name: DUONIX TC-01 validation
+
+on:
+  push:
+    branches:
+      - automation/tc-01-tooling-bootstrap
+  pull_request:
+    branches:
+      - automation/auto-001-bootstrap
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+
+permissions:
+  contents: read
+
+jobs:
+  deterministic-validation:
+    name: deterministic-validation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      REQUIRED_BASE_SHA: 8a08658222e19a5cb542f6d7975505c88ae72369
+      REQUIRED_PR_BASE_BRANCH: automation/auto-001-bootstrap
+      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      PR_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+
+    steps:
+      - name: Enforce TC-01 event identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            [[ "$GITHUB_HEAD_REF" == "automation/tc-01-tooling-bootstrap" ]] || {
+              echo "BASELINE_MISMATCH: unexpected pull request head ref" >&2
+              exit 1
+            }
+            [[ "$GITHUB_BASE_REF" == "$REQUIRED_PR_BASE_BRANCH" ]] || {
+              echo "BASELINE_MISMATCH: unexpected pull request base ref" >&2
+              exit 1
+            }
+            [[ "$PR_BASE_SHA" == "$REQUIRED_BASE_SHA" ]] || {
+              echo "BASELINE_MISMATCH: unexpected pull request base SHA" >&2
+              exit 1
+            }
+          else
+            [[ "$GITHUB_REF_NAME" == "automation/tc-01-tooling-bootstrap" ]] || {
+              echo "BASELINE_MISMATCH: unexpected push branch" >&2
+              exit 1
+            }
+          fi
+
+      - name: Checkout exact candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.CANDIDATE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify checkout, base, and ancestry
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual_sha="$(git rev-parse HEAD)"
+          [[ "$actual_sha" == "$CANDIDATE_SHA" ]] || {
+            echo "BASELINE_MISMATCH: checkout HEAD $actual_sha does not equal CANDIDATE_SHA $CANDIDATE_SHA" >&2
+            exit 1
+          }
+          resolved_base_branch_sha="$(git rev-parse "refs/remotes/origin/$REQUIRED_PR_BASE_BRANCH")"
+          [[ "$resolved_base_branch_sha" == "$REQUIRED_BASE_SHA" ]] || {
+            echo "BASELINE_MISMATCH: resolved base branch SHA $resolved_base_branch_sha" >&2
+            exit 1
+          }
+          git merge-base --is-ancestor "$REQUIRED_BASE_SHA" "$CANDIDATE_SHA" || {
+            echo "BASELINE_MISMATCH: required base is not an ancestor of candidate" >&2
+            exit 1
+          }
+          echo "RESOLVED_BASE_BRANCH_SHA=$resolved_base_branch_sha" >> "$GITHUB_ENV"
+
+      - name: Set up Node 24
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24.x
+
+      - name: Prepare external evidence directory
+        shell: bash
+        run: |
+          evidence_dir="$RUNNER_TEMP/tc01"
+          mkdir -p "$evidence_dir"
+          echo "EVIDENCE_DIR=$evidence_dir" >> "$GITHUB_ENV"
+
+      - name: Run deterministic TC-01 validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --version | grep -E '^v24\.'
+          git diff --check "$REQUIRED_BASE_SHA" "$CANDIDATE_SHA"
+          node scripts/validate-task-contract.js automation/contracts/tc-01-tooling-bootstrap.json
+          node scripts/validate-changed-paths.js automation/contracts/tc-01-tooling-bootstrap.json "$REQUIRED_BASE_SHA" "$CANDIDATE_SHA" "$EVIDENCE_DIR"
+          node scripts/validate-smoke.js
+          node scripts/test-tooling-bootstrap.js "$EVIDENCE_DIR"
+          node scripts/validate-tooling-bootstrap.js automation/contracts/tc-01-tooling-bootstrap.json "$REQUIRED_BASE_SHA" "$CANDIDATE_SHA" "$EVIDENCE_DIR/tc01-validation-evidence.json"
+          test -z "$(git status --porcelain)"
+
+      - name: Upload TC-01 validation evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: tc-01-validation-evidence-${{ env.CANDIDATE_SHA }}
+          path: |
+            ${{ runner.temp }}/tc01/tc01-validation-evidence.json
+            ${{ runner.temp }}/tc01/changed-paths.txt
+            ${{ runner.temp }}/tc01/changed-modes-raw.txt
+            ${{ runner.temp }}/tc01/self-test-evidence.json
+          if-no-files-found: error
+          retention-days: 30
