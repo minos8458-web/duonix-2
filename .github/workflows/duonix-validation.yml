@@ -26,7 +26,6 @@ jobs:
       REQUIRED_PR_BASE_BRANCH: automation/auto-001-bootstrap
       CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       PR_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
-      EVIDENCE_DIR: ${{ runner.temp }}/tc01/
 
     steps:
       - name: Enforce TC-01 event identity
@@ -87,7 +86,10 @@ jobs:
 
       - name: Prepare external evidence directory
         shell: bash
-        run: mkdir -p "$EVIDENCE_DIR"
+        run: |
+          evidence_dir="$RUNNER_TEMP/tc01"
+          mkdir -p "$evidence_dir"
+          echo "EVIDENCE_DIR=$evidence_dir" >> "$GITHUB_ENV"
 
       - name: Run deterministic TC-01 validation
         shell: bash
@@ -108,9 +110,9 @@ jobs:
         with:
           name: tc-01-validation-evidence-${{ env.CANDIDATE_SHA }}
           path: |
-            ${{ env.EVIDENCE_DIR }}/tc01-validation-evidence.json
-            ${{ env.EVIDENCE_DIR }}/changed-paths.txt
-            ${{ env.EVIDENCE_DIR }}/changed-modes-raw.txt
-            ${{ env.EVIDENCE_DIR }}/self-test-evidence.json
+            ${{ runner.temp }}/tc01/tc01-validation-evidence.json
+            ${{ runner.temp }}/tc01/changed-paths.txt
+            ${{ runner.temp }}/tc01/changed-modes-raw.txt
+            ${{ runner.temp }}/tc01/self-test-evidence.json
           if-no-files-found: error
           retention-days: 30

@@ -90,21 +90,56 @@ function yamlList(block, key) {
   return values;
 }
 
-function workflowFailures(contract) {
+function yamlJobEnvBlock(source) {
+  const lines = source.split(/\r?\n/);
+  const jobStart = lines.findIndex((line) => line === '  deterministic-validation:');
+  if (jobStart === -1) return null;
+  const envStart = lines.findIndex((line, index) => index > jobStart && line === '    env:');
+  if (envStart === -1 || lines.slice(jobStart + 1, envStart).some((line) => /^  \S/.test(line))) return null;
+
+  let end = envStart + 1;
+  while (end < lines.length && (lines[end].trim() === '' || /^ {6,}\S/.test(lines[end]))) end += 1;
+  return lines.slice(envStart + 1, end);
+}
+
+function yamlStepBlock(source, name) {
+  const lines = source.split(/\r?\n/);
+  const start = lines.findIndex((line) => line === `      - name: ${name}`);
+  if (start === -1) return null;
+  let end = start + 1;
+  while (end < lines.length && !/^      - name: /.test(lines[end])) end += 1;
+  return lines.slice(start, end).join('\n');
+}
+
+function workflowFailures(contract, workflowSource) {
   const workflowPath = path.join(repositoryRoot, contract.allowed_paths[0]);
-  let workflow;
-  try {
-    workflow = fs.readFileSync(workflowPath, 'utf8');
-  } catch (error) {
-    throw new Error(`cannot read workflow ${workflowPath}: ${error.message}`);
+  let workflow = workflowSource;
+  if (workflow === undefined) {
+    try {
+      workflow = fs.readFileSync(workflowPath, 'utf8');
+    } catch (error) {
+      throw new Error(`cannot read workflow ${workflowPath}: ${error.message}`);
+    }
   }
   const failures = [];
-  const requirePattern = (label, pattern) => {
-    if (!pattern.test(workflow)) failures.push(`WORKFLOW_CONTRACT: missing ${label}`);
+  const requirePattern = (label, pattern, source = workflow) => {
+    if (!pattern.test(source)) failures.push(`WORKFLOW_CONTRACT: missing ${label}`);
   };
   const pullRequestBlock = yamlTriggerBlock(workflow, 'pull_request');
   const pullRequestTypes = yamlList(pullRequestBlock, 'types');
   const expectedPullRequestTypes = ['opened', 'synchronize', 'reopened', 'ready_for_review'];
+  const jobEnv = yamlJobEnvBlock(workflow);
+  const prepareEvidenceStep = yamlStepBlock(workflow, 'Prepare external evidence directory');
+  const uploadEvidenceStep = yamlStepBlock(workflow, 'Upload TC-01 validation evidence');
+
+  if (jobEnv?.some((line) => /^ {6}EVIDENCE_DIR\s*:/.test(line))) {
+    failures.push('WORKFLOW_CONTRACT: jobs.deterministic-validation.env must not define EVIDENCE_DIR; runner.temp is unavailable at job level');
+  }
+  if (jobEnv?.some((line) => /\$\{\{\s*runner\./.test(line))) {
+    failures.push('WORKFLOW_CONTRACT: runner context is forbidden in jobs.deterministic-validation.env');
+  }
+  if (!prepareEvidenceStep) failures.push('WORKFLOW_CONTRACT: missing Prepare external evidence directory step');
+  if (!uploadEvidenceStep) failures.push('WORKFLOW_CONTRACT: missing Upload TC-01 validation evidence step');
 
   if (/pull_request_target\s*:/.test(workflow)) failures.push('WORKFLOW_CONTRACT: pull_request_target is forbidden');
   if (pullRequestBlock?.some((line) => /^ {4}paths(?:-ignore)?:/.test(line))) {
@@ -131,12 +166,18 @@ function workflowFailures(contract) {
   requirePattern('candidate-specific artifact name', /name:\s*tc-01-validation-evidence-\$\{\{\s*env\.CANDIDATE_SHA\s*\}\}/);
   requirePattern('artifact retention', /retention-days:\s*30/);
   for (const evidenceFile of contract.workflow.evidence_files) {
-    requirePattern(`evidence file ${evidenceFile}`, new RegExp(evidenceFile.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    requirePattern(
+      `upload-artifact runner temp path for ${evidenceFile}`,
+      new RegExp(`\\$\\{\\{\\s*runner\\.temp\\s*\\}\\}/tc01/${evidenceFile.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`),
+      uploadEvidenceStep || '',
+    );
   }
+  requirePattern('runner temp evidence directory assignment', /evidence_dir="\$RUNNER_TEMP\/tc01"/, prepareEvidenceStep || '');
+  requirePattern('external evidence directory creation', /mkdir -p "\$evidence_dir"/, prepareEvidenceStep || '');
+  requirePattern('GITHUB_ENV evidence directory export', /echo "EVIDENCE_DIR=\$evidence_dir" >> "\$GITHUB_ENV"/, prepareEvidenceStep || '');
   requirePattern('changed-path evidence CLI', /validate-changed-paths\.js[^\n]*"\$EVIDENCE_DIR"/);
   requirePattern('self-test evidence CLI', /test-tooling-bootstrap\.js\s+"\$EVIDENCE_DIR"/);
   requirePattern('final clean worktree gate', /git status --porcelain/);
-  requirePattern('external runner temp evidence', /runner\.temp[^\n]*tc01|RUNNER_TEMP[^\n]*tc01/i);
   if (/\b(?:npm|pnpm|yarn)\s+(?:install|ci)\b/.test(workflow)) failures.push('WORKFLOW_CONTRACT: package installation is forbidden');
   return failures;
 }
@@ -352,3 +393,5 @@ function main(argv) {
 if (require.main === module) {
   process.exitCode = main(process.argv.slice(2));
 }
+
+module.exports = { workflowFailures };
