@@ -40,12 +40,11 @@ function main(argv) {
   try {
     fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'duonix-tc01-'));
     const scopeRepo = path.join(fixtureRoot, 'scope-negative');
-    fs.mkdirSync(scopeRepo);
-    requireGit(run('git', ['init', '--quiet'], scopeRepo), 'scope fixture git init');
-    requireGit(run('git', ['-c', 'user.name=TC-01 Self Test', '-c', 'user.email=tc01@example.invalid', 'commit', '--allow-empty', '--quiet', '-m', 'fixture base'], scopeRepo), 'scope fixture base commit');
+    requireGit(run('git', ['clone', '--quiet', '--no-checkout', repositoryRoot, scopeRepo], fixtureRoot), 'scope fixture local clone');
+    requireGit(run('git', ['switch', '--detach', '8a08658222e19a5cb542f6d7975505c88ae72369'], scopeRepo), 'scope fixture exact base checkout');
     const baseSha = run('git', ['rev-parse', 'HEAD'], scopeRepo);
     requireGit(baseSha, 'scope fixture base SHA');
-    fs.writeFileSync(path.join(scopeRepo, 'duonix.html'), '<!doctype html><title>out of scope</title>\n');
+    fs.appendFileSync(path.join(scopeRepo, 'duonix.html'), '\n<!-- TC-01 disposable out-of-scope fixture -->\n');
     requireGit(run('git', ['add', '--', 'duonix.html'], scopeRepo), 'scope fixture add');
     requireGit(run('git', ['-c', 'user.name=TC-01 Self Test', '-c', 'user.email=tc01@example.invalid', 'commit', '--quiet', '-m', 'out of scope fixture'], scopeRepo), 'scope fixture candidate commit');
     const candidateSha = run('git', ['rev-parse', 'HEAD'], scopeRepo);
